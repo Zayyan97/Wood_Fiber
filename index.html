@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>Forest Fires in Wood Fiber on the year of 2019</title>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.15/esri/themes/light/main.css"
+    />
+    <script src="https://js.arcgis.com/4.15/"></script>
+
+    <script>
+      require([
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/layers/FeatureLayer"
+      ], function(Map, MapView, FeatureLayer) {
+        const map = new Map({
+          basemap: "satellite"
+        });
+
+        const view = new MapView({
+          container: "sceneDiv",
+          map: map,
+          center: [115.452754,  -2.710038],
+          zoom: 5,
+          padding: {
+            right: 300
+          }
+        });
+
+         const forestfiresLayer = new FeatureLayer({
+        url: "https://gis-gfw.wri.org/arcgis/rest/services/Fires/FIRMS_ASEAN/MapServer/8/query?where=1%3D1&outFields=*&outSR=4326&f=json"
+      });
+
+      map.add(forestfiresLayer);
+
+        const listNode = document.getElementById("nyc_graphics");
+
+        /********************
+         * Add feature layer
+         ********************/
+
+        // Create the PopupTemplate
+        const popupTemplate = {
+          // autocasts as new PopupTemplate()
+          title: "{name} ({group_comp})",
+          content: [
+            {
+              type: "fields",
+              fieldInfos: [
+                {
+                  fieldName: "company",
+                  label: "Company",
+                  format: {
+                    places: 0,
+                    digitSeparator: true
+                  }
+                },
+                {
+                  fieldName: "area_ha",
+                  label: "Area(Ha)",
+                  format: {
+                    places: 0,
+                    digitSeparator: true
+                  }
+                },
+                {
+                  fieldName: "po_legalst",
+                  label: "Status",
+                  format: {
+                    places: 0,
+                    digitSeparator: true
+                  }
+                },
+                {
+                  fieldName: "po_hgu",
+                  label: "Ijin",
+                  format: {
+                    places: 0,
+                    digitSeparator: true
+                  }
+                }
+              ]
+            }
+          ]
+        };
+
+        // Create the FeatureLayer using the popupTemplate
+        const featureLayer = new FeatureLayer({
+          url:
+            "https://gis-gfw.wri.org/arcgis/rest/services/country_data/asia/MapServer/0",
+          outFields: ["name", "group_comp"], 
+          // used by queryFeatures
+          popupTemplate: popupTemplate
+        });
+        map.add(featureLayer);
+
+        let graphics;
+
+        view.whenLayerView(featureLayer).then(function(layerView) {
+          layerView.watch("updating", function(value) {
+            if (!value) {
+              // wait for the layer view to finish updating
+
+              // query all the features available for drawing.
+              layerView
+                .queryFeatures({
+                  geometry: view.extent,
+                  returnGeometry: true,
+                  orderByFields: ["objectid"]
+                })
+                .then(function(results) {
+                  graphics = results.features;
+
+                  const fragment = document.createDocumentFragment();
+
+                  graphics.forEach(function(result, index) {
+                    const attributes = result.attributes;
+                    const name = attributes.name;
+
+                    // Create a list zip codes in NY
+                    const li = document.createElement("li");
+                    li.classList.add("panel-result");
+                    li.tabIndex = 0;
+                    li.setAttribute("data-result-id", index);
+                    li.textContent = name;
+
+                    fragment.appendChild(li);
+                  });
+                  // Empty the current list
+                  listNode.innerHTML = "";
+                  listNode.appendChild(fragment);
+                })
+                .catch(function(error) {
+                  console.error("query failed: ", error);
+                });
+            }
+          });
+        });
+
+        // listen to click event on the zip code list
+        listNode.addEventListener("click", onListClickHandler);
+
+        function onListClickHandler(event) {
+          const target = event.target;
+          const resultId = target.getAttribute("data-result-id");
+
+          // get the graphic corresponding to the clicked zip code
+          const result =
+            resultId && graphics && graphics[parseInt(resultId, 10)];
+
+          if (result) {
+            // open the popup at the centroid of zip code polygon
+            // and set the popup's features which will populate popup content and title.
+
+            view
+              .goTo(result.geometry.extent.expand(2))
+              .then(function() {
+                view.popup.open({
+                  features: [result],
+                  location: result.geometry.centroid
+                });
+              })
+              .catch(function(error) {
+                if (error.name != "AbortError") {
+                  console.error(error);
+                }
+              });
+          }
+        }
+      });
+    </script>
+
+    <style>
+      html,
+      body,
+      #sceneDiv {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .panel-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      .panel-side {
+        padding: 2px;
+        box-sizing: border-box;
+        width: 300px;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        color: #fff;
+        background-color: rgba(0, 0, 0, 0.6);
+        overflow: auto;
+        z-index: 60;
+      }
+
+      .panel-side h3 {
+        padding: 0 20px;
+        margin: 20px 0;
+      }
+
+      .panel-side ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .panel-side li {
+        list-style: none;
+        padding: 10px 20px;
+      }
+
+      .panel-result {
+        cursor: pointer;
+        margin: 2px 0;
+        background-color: rgba(0, 0, 0, 0.3);
+      }
+
+      .panel-result:hover,
+      .panel-result:focus {
+        color: red;
+        background-color: rgba(0, 0, 0, 0.75);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="panel-container">
+      <div class="panel-side esri-widget">
+        <h3>Indonesia Wood Fiber Concession</h3>
+        <ul id="nyc_graphics">
+          <li>Loading&hellip;</li>
+        </ul>
+      </div>
+      <div id="sceneDiv"></div>
+    </div>
+  </body>
+</html>
